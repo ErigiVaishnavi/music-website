@@ -2,13 +2,16 @@ console.log("welcome to the world of musicyyy")
 
 /// Initialize variables
 let songIndex = 0;
-let audioElement = new Audio('songs/1.mpeg');
+let audioElement = new Audio();
+audioElement.preload = "metadata";
+// Set the MIME type for MPEG audio
+audioElement.type = 'audio/mpeg';
+
 let masterPlay = document.getElementById('masterPlay');
 let myProgressBar = document.getElementById('myProgressBar');
 let gif = document.getElementById('gif');
 let masterSongName = document.getElementById('masterSongName');
 let songItems = Array.from(document.getElementsByClassName('songItem'));
-
 
 let songs = [
     {songName: "Bharamu moyu varalara nayodhaku randi", filePath: "songs/1.mpeg", coverPath: "covers/1.png"},
@@ -49,85 +52,244 @@ let songs = [
     {songName: "Naa jeevitha Vyadhanandhu ", filePath: "songs/37.mpeg", coverPath: "covers/1.png"},
 ]
 
-// audioElement.play();
+// Initialize song names and covers
 songItems.forEach((element, i)=>{ 
     element.getElementsByTagName("img")[0].src = songs[i].coverPath; 
     element.getElementsByClassName("songName")[0].innerText = songs[i].songName; 
 })
 
-// handle play/pause click
+// Add buffering indicator
+let isBuffering = false;
+audioElement.addEventListener('waiting', () => {
+    isBuffering = true;
+    masterSongName.innerText = 'Buffering... ' + songs[songIndex].songName;
+});
+
+audioElement.addEventListener('canplay', () => {
+    isBuffering = false;
+    masterSongName.innerText = songs[songIndex].songName;
+});
+
+// Improved error handling with format check
+audioElement.addEventListener('error', (e) => {
+    console.error('Error loading audio:', e);
+    const errorCode = e.target.error ? e.target.error.code : null;
+    
+    if (errorCode === 3) { // MEDIA_ERR_DECODE
+        console.log('Trying alternative audio format handling...');
+        const currentSrc = audioElement.src;
+        audioElement.src = '';
+        setTimeout(() => {
+            audioElement.src = currentSrc;
+            audioElement.load();
+            audioElement.play().catch(err => {
+                console.error('Alternative playback failed:', err);
+            });
+        }, 1000);
+    } else if (errorCode === 2) { // MEDIA_ERR_NETWORK
+        setTimeout(() => {
+            const currentSrc = audioElement.src;
+            audioElement.src = currentSrc;
+            audioElement.load();
+            audioElement.play().catch(err => {
+                console.error('Retry failed:', err);
+            });
+        }, 1000);
+    }
+    masterPlay.classList.remove('fa-pause-circle');
+    masterPlay.classList.add('fa-play-circle');
+    gif.style.opacity = 0;
+});
+
+// Function to load and play audio with format handling
+const loadAndPlayAudio = (src) => {
+    return new Promise((resolve, reject) => {
+        audioElement.src = src;
+        audioElement.load();
+        
+        const playPromise = audioElement.play();
+        if (playPromise !== undefined) {
+            playPromise.then(resolve).catch(error => {
+                console.error('Playback error:', error);
+                if (error.name === 'NotSupportedError') {
+                    // Try with explicit MIME type
+                    audioElement.type = 'audio/mpeg';
+                    audioElement.load();
+                    return audioElement.play();
+                }
+                reject(error);
+            }).catch(reject);
+        }
+    });
+};
+
+// Handle main play/pause button click
 masterPlay.addEventListener('click', ()=>{
     if(audioElement.paused || audioElement.currentTime<=0){
         audioElement.play();
         masterPlay.classList.remove('fa-play-circle');
         masterPlay.classList.add('fa-pause-circle');
         gif.style.opacity = 1;
+        
+        // Update the individual song button state
+        const currentSongPlay = document.getElementById(songIndex.toString());
+        if(currentSongPlay) {
+            currentSongPlay.classList.remove('fa-play-circle');
+            currentSongPlay.classList.add('fa-pause-circle');
+        }
     }
     else{
         audioElement.pause();
         masterPlay.classList.remove('fa-pause-circle');
         masterPlay.classList.add('fa-play-circle');
         gif.style.opacity = 0;
+        
+        // Update the individual song button state
+        const currentSongPlay = document.getElementById(songIndex.toString());
+        if(currentSongPlay) {
+            currentSongPlay.classList.remove('fa-pause-circle');
+            currentSongPlay.classList.add('fa-play-circle');
+        }
     }
 })
-// Listen to Events
+
+// Update progress bar
 audioElement.addEventListener('timeupdate', ()=>{
-    //update seekbar
     progress = parseInt((audioElement.currentTime/audioElement.duration)* 100);
     myProgressBar.value = progress;
 })
 
+// Handle progress bar change
 myProgressBar.addEventListener('change',()=>{
     audioElement.currentTime = myProgressBar.value * audioElement.duration/100;
 })
-const makeAllPlays = ()=>{
+
+// Reset all play buttons to play state except current
+const makeAllPlays = (exceptId)=>{
     Array.from(document.getElementsByClassName('songItemPlay')).forEach((element)=>{
-        element.classList.remove('fa-pause-circle');
-        element.classList.add('fa-play-circle');
+        if(element.id !== exceptId) {
+            element.classList.remove('fa-pause-circle');
+            element.classList.add('fa-play-circle');
+        }
     })
 }
+
+// Handle individual song play buttons
 Array.from(document.getElementsByClassName('songItemPlay')).forEach((element)=>{
-    element.addEventListener('click', (e)=>{ 
-        makeAllPlays();
-        songIndex = parseInt(e.target.id);
-        e.target.classList.remove('fa-play-circle');
-        e.target.classList.add('fa-pause-circle');
-        audioElement.src = `songs/${songIndex+1}.mpeg`;
-        masterSongName.innerText = songs[songIndex].songName;
-        audioElement.currentTime = 0;
-        audioElement.play();
-        gif.style.opacity = 1;
-        masterPlay.classList.remove('fa-play-circle');
-        masterPlay.classList.add('fa-pause-circle');
+    element.addEventListener('click', async (e)=>{ 
+        const clickedId = e.target.id;
+        const isPlaying = !audioElement.paused;
+        const isSameSong = songIndex === parseInt(clickedId);
+
+        if(isSameSong && isPlaying) {
+            // Pause current song
+            audioElement.pause();
+            e.target.classList.remove('fa-pause-circle');
+            e.target.classList.add('fa-play-circle');
+            masterPlay.classList.remove('fa-pause-circle');
+            masterPlay.classList.add('fa-play-circle');
+            gif.style.opacity = 0;
+        } else if(isSameSong && !isPlaying) {
+            // Resume paused song
+            try {
+                await audioElement.play();
+                e.target.classList.remove('fa-play-circle');
+                e.target.classList.add('fa-pause-circle');
+                masterPlay.classList.remove('fa-play-circle');
+                masterPlay.classList.add('fa-pause-circle');
+                gif.style.opacity = 1;
+            } catch (error) {
+                console.error('Error resuming audio:', error);
+            }
+        } else {
+            // Play new song
+            makeAllPlays(clickedId);
+            songIndex = parseInt(clickedId);
+            e.target.classList.remove('fa-play-circle');
+            e.target.classList.add('fa-pause-circle');
+            
+            // Show loading state
+            masterSongName.innerText = 'Loading... ' + songs[songIndex].songName;
+            gif.style.opacity = 0;
+            
+            try {
+                await loadAndPlayAudio(`songs/${songIndex+1}.mpeg`);
+                masterSongName.innerText = songs[songIndex].songName;
+                gif.style.opacity = 1;
+                masterPlay.classList.remove('fa-play-circle');
+                masterPlay.classList.add('fa-pause-circle');
+            } catch (error) {
+                console.error('Error playing new song:', error);
+                e.target.classList.remove('fa-pause-circle');
+                e.target.classList.add('fa-play-circle');
+                masterPlay.classList.remove('fa-pause-circle');
+                masterPlay.classList.add('fa-play-circle');
+                masterSongName.innerText = 'Error playing ' + songs[songIndex].songName;
+            }
+        }
     })
 })
-document.getElementById('next').addEventListener('click', ()=>{
+
+// Handle next button
+document.getElementById('next').addEventListener('click', async ()=>{
     if(songIndex>=33){
         songIndex = 0
     }
     else{
         songIndex += 1;
     }
-    audioElement.src = `songs/${songIndex+1}.mpeg`;
-    masterSongName.innerText = songs[songIndex].songName;
-    audioElement.currentTime = 0;
-    audioElement.play();
-    masterPlay.classList.remove('fa-play-circle');
-    masterPlay.classList.add('fa-pause-circle');
-
+    makeAllPlays(songIndex.toString());
+    const currentSongPlay = document.getElementById(songIndex.toString());
+    if(currentSongPlay) {
+        currentSongPlay.classList.remove('fa-play-circle');
+        currentSongPlay.classList.add('fa-pause-circle');
+    }
+    
+    try {
+        await loadAndPlayAudio(`songs/${songIndex+1}.mpeg`);
+        masterSongName.innerText = songs[songIndex].songName;
+        masterPlay.classList.remove('fa-play-circle');
+        masterPlay.classList.add('fa-pause-circle');
+    } catch (error) {
+        console.error('Error playing next song:', error);
+        if(currentSongPlay) {
+            currentSongPlay.classList.remove('fa-pause-circle');
+            currentSongPlay.classList.add('fa-play-circle');
+        }
+        masterPlay.classList.remove('fa-pause-circle');
+        masterPlay.classList.add('fa-play-circle');
+        masterSongName.innerText = 'Error playing ' + songs[songIndex].songName;
+    }
 })
 
-document.getElementById('previous').addEventListener('click', ()=>{
+// Handle previous button
+document.getElementById('previous').addEventListener('click', async ()=>{
     if(songIndex<=0){
         songIndex = 0
     }
     else{
         songIndex -= 1;
     }
-    audioElement.src = `songs/${songIndex+1}.mpeg`;
-    masterSongName.innerText = songs[songIndex].songName;
-    audioElement.currentTime = 0;
-    audioElement.play();
-    masterPlay.classList.remove('fa-play-circle');
-    masterPlay.classList.add('fa-pause-circle');
+    makeAllPlays(songIndex.toString());
+    const currentSongPlay = document.getElementById(songIndex.toString());
+    if(currentSongPlay) {
+        currentSongPlay.classList.remove('fa-play-circle');
+        currentSongPlay.classList.add('fa-pause-circle');
+    }
+    
+    try {
+        await loadAndPlayAudio(`songs/${songIndex+1}.mpeg`);
+        masterSongName.innerText = songs[songIndex].songName;
+        masterPlay.classList.remove('fa-play-circle');
+        masterPlay.classList.add('fa-pause-circle');
+    } catch (error) {
+        console.error('Error playing previous song:', error);
+        if(currentSongPlay) {
+            currentSongPlay.classList.remove('fa-pause-circle');
+            currentSongPlay.classList.add('fa-play-circle');
+        }
+        masterPlay.classList.remove('fa-pause-circle');
+        masterPlay.classList.add('fa-play-circle');
+        masterSongName.innerText = 'Error playing ' + songs[songIndex].songName;
+    }
 })
