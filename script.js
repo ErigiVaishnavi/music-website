@@ -3,7 +3,8 @@ console.log("welcome to the world of musicyyy")
 /// Initialize variables
 let songIndex = 0;
 let audioElement = new Audio();
-audioElement.preload = "metadata";
+audioElement.preload = "metadata"; // Change to metadata preload
+
 // Set the MIME type for MPEG audio
 audioElement.type = 'audio/mpeg';
 
