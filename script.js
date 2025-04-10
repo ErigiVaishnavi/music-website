@@ -190,7 +190,10 @@ Array.from(document.getElementsByClassName('songItemPlay')).forEach((element)=>{
             masterPlay.classList.remove('fa-pause-circle');
             masterPlay.classList.add('fa-play-circle');
             gif.style.opacity = 0;
-        } else if(isSameSong && !isPlaying) {
+            return;
+        } 
+        
+        if(isSameSong && !isPlaying) {
             // Resume paused song
             try {
                 await audioElement.play();
@@ -202,31 +205,32 @@ Array.from(document.getElementsByClassName('songItemPlay')).forEach((element)=>{
             } catch (error) {
                 console.error('Error resuming audio:', error);
             }
-        } else {
-            // Play new song
-            makeAllPlays(clickedId);
-            songIndex = parseInt(clickedId);
-            e.target.classList.remove('fa-play-circle');
-            e.target.classList.add('fa-pause-circle');
-            
-            // Show loading state
-            masterSongName.innerText = 'Loading... ' + songs[songIndex].songName;
-            gif.style.opacity = 0;
-            
-            try {
-                await loadAndPlayAudio(`songs/${songIndex+1}.mpeg`);
-                masterSongName.innerText = songs[songIndex].songName;
-                gif.style.opacity = 1;
-                masterPlay.classList.remove('fa-play-circle');
-                masterPlay.classList.add('fa-pause-circle');
-            } catch (error) {
-                console.error('Error playing new song:', error);
-                e.target.classList.remove('fa-pause-circle');
-                e.target.classList.add('fa-play-circle');
-                masterPlay.classList.remove('fa-pause-circle');
-                masterPlay.classList.add('fa-play-circle');
-                masterSongName.innerText = 'Error playing ' + songs[songIndex].songName;
-            }
+            return;
+        }
+        
+        // Play new song
+        makeAllPlays(clickedId);
+        songIndex = parseInt(clickedId);
+        e.target.classList.remove('fa-play-circle');
+        e.target.classList.add('fa-pause-circle');
+        
+        // Show loading state
+        masterSongName.innerText = 'Loading... ' + songs[songIndex].songName;
+        gif.style.opacity = 0;
+        
+        try {
+            await loadAndPlayAudio(`songs/${songIndex+1}.mpeg`);
+            masterSongName.innerText = songs[songIndex].songName;
+            gif.style.opacity = 1;
+            masterPlay.classList.remove('fa-play-circle');
+            masterPlay.classList.add('fa-pause-circle');
+        } catch (error) {
+            console.error('Error playing new song:', error);
+            e.target.classList.remove('fa-pause-circle');
+            e.target.classList.add('fa-play-circle');
+            masterPlay.classList.remove('fa-pause-circle');
+            masterPlay.classList.add('fa-play-circle');
+            masterSongName.innerText = 'Error playing ' + songs[songIndex].songName;
         }
     })
 })
